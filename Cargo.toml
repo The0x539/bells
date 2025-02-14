@@ -1,0 +1,7 @@
+[package]
+name = "bells"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+musicxml = { git = "https://github.com/The0x539/musicxml", branch = "copy-clone" }
