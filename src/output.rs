@@ -63,20 +63,35 @@ pub struct Note {
 
 impl Display for Note {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut step = ['A', 'B', 'C', 'D', 'E', 'F', 'G'][self.step as usize];
-        if self.octave == 5 {
-            step = step.to_ascii_lowercase();
-        }
-        f.write_char(step)?;
+        const STEPS: [char; 7] = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+
+        let mut step_index = self.step as usize;
+        let octave = self.octave;
+        let mut sharp = false;
 
         match self.semitone {
             0 => {}
-            1 => f.write_char('#')?,
-            _ => todo!(), // going down to the previous octave will be annoying
+            1 => sharp = true,
+            -1 => {
+                sharp = true;
+                // The octave changes when going from B to C, and there is no C♭
+                step_index = step_index.checked_sub(1).unwrap_or(6);
+            }
+            _ => todo!(),
         }
 
-        if !matches!(self.octave, 4 | 5) {
-            f.write_char(char::from_digit(self.octave as u32, 10).unwrap())?;
+        let mut step = STEPS[step_index];
+        if octave >= 5 {
+            step = step.to_ascii_lowercase();
+        }
+
+        f.write_char(step)?;
+        if sharp {
+            f.write_char('#')?;
+        }
+
+        if !matches!(octave, 4 | 5) {
+            f.write_char(char::from_digit(octave as u32, 10).unwrap())?;
         }
 
         Ok(())

@@ -37,6 +37,9 @@ impl State {
         for part in &score.content.part {
             output.parts.push(self.part(part));
         }
+        // TODO: get rid of this "state" altogether.
+        // problem is that bpm is specified with the measure, not the score,
+        // but we care about it score-wide
         output.bpm = self.bpm.unwrap().1;
         output
     }
