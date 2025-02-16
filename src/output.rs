@@ -2,6 +2,10 @@ use std::fmt::{Display, Formatter, Write};
 
 use musicxml::datatypes::Step;
 
+pub enum SpecialCase {
+    CrossMeasureTie(Event),
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Score {
     pub parts: Vec<Part>,
@@ -44,6 +48,9 @@ pub struct Part {
 
 #[derive(Debug, Default, Clone)]
 pub struct Measure {
+    /// The duration of the note at the start of the measure,
+    /// if that note is tied to the end of the previous measure.
+    pub carryover: u32,
     pub events: Vec<Event>,
     pub divisions: Option<u32>,
 }
@@ -129,8 +136,11 @@ impl Display for Event {
 
 impl Display for Measure {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for _ in 0..self.carryover {
+            f.write_char('~')?;
+        }
         for (i, event) in self.events.iter().enumerate() {
-            if i > 0 {
+            if i > 0 || self.carryover > 0 {
                 f.write_char(' ')?;
             }
             write!(f, "{event}")?;

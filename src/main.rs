@@ -40,7 +40,7 @@ impl State {
         // TODO: get rid of this "state" altogether.
         // problem is that bpm is specified with the measure, not the score,
         // but we care about it score-wide
-        output.bpm = self.bpm.unwrap().1;
+        output.bpm = self.bpm.unwrap_or((0.25, 120)).1;
         output
     }
 
@@ -60,7 +60,15 @@ impl State {
         for element in &measure.content {
             match element {
                 MeasureElement::Direction(d) => self.direction(d),
-                MeasureElement::Note(n) => self.note(n, &mut output),
+                MeasureElement::Note(n) => {
+                    if let Some(special_case) = self.note(n, &mut output) {
+                        match special_case {
+                            output::SpecialCase::CrossMeasureTie(event) => {
+                                output.carryover = event.duration;
+                            }
+                        }
+                    }
+                }
                 MeasureElement::Attributes(a) => {
                     if let Some(divisions) = &a.content.divisions {
                         output.divisions = Some(divisions.content.0);
@@ -97,15 +105,16 @@ impl State {
         }
     }
 
-    fn note(&mut self, note: &Note, output: &mut output::Measure) {
+    fn note(&mut self, note: &Note, output: &mut output::Measure) -> Option<output::SpecialCase> {
         let NoteType::Normal(info) = &note.content.info else {
             println!("eep, non-normal note");
-            return;
+            return None;
         };
 
         let duration = info.duration.content.0;
 
         let mut output_note = vec![];
+
         if let AudibleType::Pitch(pitch) = info.audible {
             output_note.push(output::Note {
                 step: pitch.content.step.content,
@@ -116,23 +125,29 @@ impl State {
 
         if info.tie.len() > 0 {
             assert_eq!(info.tie.len(), 1);
-
             if info.tie[0].attributes.r#type == StartStop::Stop {
-                let prev = output.events.last_mut().unwrap();
+                let Some(prev) = output.events.last_mut() else {
+                    return Some(output::SpecialCase::CrossMeasureTie(output::Event {
+                        duration,
+                        notes: output_note,
+                    }));
+                };
                 assert_eq!(prev.notes, output_note);
                 prev.duration += duration;
-                return;
+                return None;
             }
         } else if info.chord.is_some() {
             let prev = output.events.last_mut().unwrap();
             assert_eq!(prev.duration, duration);
             prev.notes.extend(output_note);
-            return;
+            return None;
         }
 
         output.events.push(output::Event {
             duration,
             notes: output_note,
         });
+
+        None
     }
 }
