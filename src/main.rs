@@ -113,15 +113,20 @@ impl State {
 
         let duration = info.duration.content.0;
 
-        let mut output_note = vec![];
-
-        if let AudibleType::Pitch(pitch) = info.audible {
-            output_note.push(output::Note {
-                step: pitch.content.step.content,
-                semitone: pitch.content.alter.map_or(0, |a| a.content.0),
-                octave: pitch.content.octave.content.0,
+        let AudibleType::Pitch(pitch) = info.audible else {
+            assert!(matches!(info.audible, AudibleType::Rest(..)));
+            output.events.push(output::Event {
+                duration,
+                notes: vec![],
             });
-        }
+            return None;
+        };
+
+        let output_note = output::Note {
+            step: pitch.content.step.content,
+            semitone: pitch.content.alter.map_or(0, |a| a.content.0),
+            octave: pitch.content.octave.content.0,
+        };
 
         if info.tie.len() > 0 {
             assert_eq!(info.tie.len(), 1);
@@ -129,23 +134,28 @@ impl State {
                 let Some(prev) = output.events.last_mut() else {
                     return Some(output::SpecialCase::CrossMeasureTie(output::Event {
                         duration,
-                        notes: output_note,
+                        notes: vec![output_note],
                     }));
                 };
-                assert_eq!(prev.notes, output_note);
+                assert!(
+                    prev.notes.contains(&output_note),
+                    "tie between different notes",
+                );
                 prev.duration += duration;
                 return None;
             }
-        } else if info.chord.is_some() {
+        }
+
+        if info.chord.is_some() {
             let prev = output.events.last_mut().unwrap();
             assert_eq!(prev.duration, duration);
-            prev.notes.extend(output_note);
+            prev.notes.push(output_note);
             return None;
         }
 
         output.events.push(output::Event {
             duration,
-            notes: output_note,
+            notes: vec![output_note],
         });
 
         None
