@@ -29,6 +29,7 @@ mod output;
 #[derive(Default)]
 struct State {
     bpm: Option<(f64, u32)>,
+    tie_already_used_this_note: bool,
 }
 
 impl State {
@@ -60,15 +61,7 @@ impl State {
         for element in &measure.content {
             match element {
                 MeasureElement::Direction(d) => self.direction(d),
-                MeasureElement::Note(n) => {
-                    if let Some(special_case) = self.note(n, &mut output) {
-                        match special_case {
-                            output::SpecialCase::CrossMeasureTie(event) => {
-                                output.carryover = event.duration;
-                            }
-                        }
-                    }
-                }
+                MeasureElement::Note(n) => self.note(n, &mut output),
                 MeasureElement::Attributes(a) => {
                     if let Some(divisions) = &a.content.divisions {
                         output.divisions = Some(divisions.content.0);
@@ -105,10 +98,10 @@ impl State {
         }
     }
 
-    fn note(&mut self, note: &Note, output: &mut output::Measure) -> Option<output::SpecialCase> {
+    fn note(&mut self, note: &Note, output: &mut output::Measure) {
         let NoteType::Normal(info) = &note.content.info else {
             println!("eep, non-normal note");
-            return None;
+            return;
         };
 
         let duration = info.duration.content.0;
@@ -119,7 +112,7 @@ impl State {
                 duration,
                 notes: vec![],
             });
-            return None;
+            return;
         };
 
         let output_note = output::Note {
@@ -128,36 +121,40 @@ impl State {
             octave: pitch.content.octave.content.0,
         };
 
-        if info.tie.len() > 0 {
+        if info.tie.len() > 0 && info.tie[0].attributes.r#type == StartStop::Stop {
             assert_eq!(info.tie.len(), 1);
-            if info.tie[0].attributes.r#type == StartStop::Stop {
-                let Some(prev) = output.events.last_mut() else {
-                    return Some(output::SpecialCase::CrossMeasureTie(output::Event {
-                        duration,
-                        notes: vec![output_note],
-                    }));
-                };
-                assert!(
-                    prev.notes.contains(&output_note),
-                    "tie between different notes",
-                );
+            let Some(prev) = output.events.last_mut() else {
+                // This is the first note in the measure,
+                // and it's tied to the last note of the previous measure.
+                if !self.tie_already_used_this_note {
+                    output.carryover += duration;
+                    self.tie_already_used_this_note = true;
+                }
+                return;
+            };
+            assert!(
+                prev.notes.contains(&output_note),
+                "tie between different notes",
+            );
+            if !self.tie_already_used_this_note {
                 prev.duration += duration;
-                return None;
+                self.tie_already_used_this_note = true;
             }
+            return;
+        } else {
+            self.tie_already_used_this_note = false;
         }
 
         if info.chord.is_some() {
             let prev = output.events.last_mut().unwrap();
             assert_eq!(prev.duration, duration);
             prev.notes.push(output_note);
-            return None;
+            return;
         }
 
         output.events.push(output::Event {
             duration,
             notes: vec![output_note],
         });
-
-        None
     }
 }

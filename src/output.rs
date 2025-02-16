@@ -2,10 +2,6 @@ use std::fmt::{Display, Formatter, Write};
 
 use musicxml::datatypes::Step;
 
-pub enum SpecialCase {
-    CrossMeasureTie(Event),
-}
-
 #[derive(Debug, Default, Clone)]
 pub struct Score {
     pub parts: Vec<Part>,
